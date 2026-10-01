@@ -259,6 +259,14 @@ _api_db_initialized = False
 def security_api():
     global _api_db_initialized
 
+    # Set CORS metadata before the IP check so blocked requests still return
+    # the proper CORS headers to the Netlify browser client. Without this,
+    # the browser reports a generic "Failed to fetch" instead of the actual
+    # 403 response.
+    origin = request.headers.get("Origin", "").rstrip("/")
+    allowed = {x.strip().rstrip("/") for x in os.getenv("CORS_ORIGINS", "https://verbas.in,https://www.verbas.in").split(",") if x.strip()}
+    request.cors_origin = origin if origin in allowed else None
+
     # Optional public-IP allowlist. When ALLOWED_PUBLIC_IPS is set, every
     # application request must come from one of those public IPv4/IPv6
     # addresses. Keep this list limited to the company's office internet
@@ -273,9 +281,6 @@ def security_api():
         ensure_database()
         bootstrap_admin()
         _api_db_initialized = True
-    origin = request.headers.get("Origin", "").rstrip("/")
-    allowed = {x.strip().rstrip("/") for x in os.getenv("CORS_ORIGINS", "https://verbas.in,https://www.verbas.in").split(",") if x.strip()}
-    request.cors_origin = origin if origin in allowed else None
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.path not in {"/api/auth/login", "/api/auth/csrf", "/api/auth/admin-reset"}:
         token = request.headers.get("X-CSRF-Token", "")
         expected = session.get("_csrf", "")
