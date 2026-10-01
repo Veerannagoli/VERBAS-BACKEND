@@ -273,7 +273,15 @@ def security_api():
     # public IP(s). Multiple addresses may be comma-separated.
     allowed_ips = {x.strip() for x in os.getenv("ALLOWED_PUBLIC_IPS", "").split(",") if x.strip()}
     if allowed_ips:
-        client_ip = request.remote_addr or ""
+        # Render sits behind Cloudflare/load balancers, so request.remote_addr
+        # is normally a Render proxy address, not the user's public IP.
+        # Render documents CF-Connecting-IP as the real client IP signal.
+        client_ip = request.headers.get("CF-Connecting-IP", "").strip()
+        if not client_ip:
+            forwarded = request.headers.get("X-Forwarded-For", "")
+            client_ip = forwarded.split(",", 1)[0].strip() if forwarded else ""
+        if not client_ip:
+            client_ip = request.remote_addr or ""
         if client_ip not in allowed_ips:
             return jsonify({"ok": False, "message": "Access is allowed only from the authorized office network."}), 403
 
