@@ -260,7 +260,7 @@ def security_api():
     origin = request.headers.get("Origin", "").rstrip("/")
     allowed = {x.strip().rstrip("/") for x in os.getenv("CORS_ORIGINS", "https://verbas.in,https://www.verbas.in").split(",") if x.strip()}
     request.cors_origin = origin if origin in allowed else None
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.path not in {"/api/auth/login", "/api/auth/csrf"}:
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.path not in {"/api/auth/login", "/api/auth/csrf", "/api/auth/admin-reset"}:
         token = request.headers.get("X-CSRF-Token", "")
         expected = session.get("_csrf", "")
         if not token or not expected or not secrets.compare_digest(token, expected):
@@ -354,6 +354,41 @@ def api_health():
 def api_csrf():
     if "_csrf" not in session: session["_csrf"]=secrets.token_urlsafe(32)
     return jsonify({"ok":True,"csrf_token":session["_csrf"]})
+
+@app.post("/api/auth/admin-reset")
+def api_admin_reset():
+    """One-time emergency admin password reset protected by a Render secret.
+
+    This endpoint is intended to be removed after the administrator password is
+    reset. It never accepts or stores a plaintext password in MySQL.
+    """
+    reset_token = os.getenv("ADMIN_RESET_TOKEN", "")
+    reset_email = os.getenv("RESET_ADMIN_EMAIL", "").strip().lower()
+    supplied_token = request.headers.get("X-Admin-Reset-Token", "")
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email", "")).strip().lower()
+    password = str(data.get("password", ""))
+
+    if not reset_token or not reset_email:
+        return api_error("Admin reset is not configured.", 404)
+    if not supplied_token or not secrets.compare_digest(supplied_token, reset_token):
+        return api_error("Unauthorized.", 401)
+    if email != reset_email:
+        return api_error("Invalid reset account.", 400)
+    if len(password) < 12:
+        return api_error("Password must be at least 12 characters.", 400)
+
+    admin = query("SELECT id FROM admins WHERE email=%s AND active=1", (email,), fetchone=True)
+    if not admin:
+        return api_error("Admin account not found.", 404)
+
+    query(
+        "UPDATE admins SET password_hash=%s WHERE id=%s",
+        (generate_password_hash(password), admin["id"]),
+        commit=True,
+    )
+    return jsonify({"ok": True, "message": "Admin password reset successfully. Remove ADMIN_RESET_TOKEN and RESET_ADMIN_EMAIL now."})
+
 
 @app.post("/api/auth/login")
 def api_login():
