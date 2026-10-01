@@ -1,0 +1,52 @@
+services:
+  - type: web
+    name: verbas-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: SESSION_COOKIE_SECURE
+        value: "1"
+      - key: SESSION_COOKIE_HTTPONLY
+        value: "1"
+      - key: SESSION_COOKIE_SAMESITE
+        value: "None"
+      - key: SESSION_HOURS
+        value: "8"
+      - key: FORCE_HSTS
+        value: "1"
+      - key: ATTENDANCE_CODE_MINUTES
+        value: "10"
+      - key: LATE_AFTER
+        value: "09:30"
+      - key: LOGIN_RATE_WINDOW_SECONDS
+        value: "900"
+      - key: LOGIN_RATE_MAX_FAILURES
+        value: "8"
+      - key: MAX_CONTENT_LENGTH
+        value: "2097152"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MYSQL_HOST
+        sync: false
+      - key: MYSQL_PORT
+        sync: false
+      - key: MYSQL_USER
+        sync: false
+      - key: MYSQL_PASSWORD
+        sync: false
+      - key: MYSQL_DB
+        sync: false
+      - key: DEFAULT_ADMIN_EMAIL
+        sync: false
+      - key: DEFAULT_ADMIN_PASSWORD
+        sync: false
+      - key: DEFAULT_ADMIN_NAME
+        value: VERBAS Administrator
+      - key: CORS_ORIGINS
+        value: https://verbas.in,https://www.verbas.in

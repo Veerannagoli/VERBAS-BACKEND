@@ -1,0 +1,14 @@
+VERBAS BACKEND ONLY
+
+Use this package for Render.
+
+1. Push the package to GitHub.
+2. Create Render Web Service.
+3. Build: pip install -r requirements.txt
+4. Start: gunicorn app:app
+5. Add MYSQL_* and DEFAULT_ADMIN_* variables.
+6. Set CORS_ORIGINS to your Netlify/custom frontend URL.
+7. Deploy.
+8. Test /api/health.
+
+This package intentionally contains NO templates/ and NO static/ frontend folders.
