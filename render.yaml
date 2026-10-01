@@ -42,8 +42,6 @@ services:
         sync: false
       - key: MYSQL_DB
         sync: false
-      - key: MYSQL_SSL_CA
-        value: /etc/secrets/aiven-ca.pem
       - key: DEFAULT_ADMIN_EMAIL
         sync: false
       - key: DEFAULT_ADMIN_PASSWORD
