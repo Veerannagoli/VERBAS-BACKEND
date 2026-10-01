@@ -8,7 +8,7 @@ from functools import wraps
 import mysql.connector
 from mysql.connector import Error, IntegrityError
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, request, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()
@@ -62,14 +62,35 @@ def clear_login_failures(email):
 
 
 def db_config(include_database=True):
+    """Build a MySQL Connector/Python configuration for Aiven MySQL."""
     cfg = {
         "host": os.getenv("MYSQL_HOST", "localhost"),
         "port": int(os.getenv("MYSQL_PORT", "3306")),
         "user": os.getenv("MYSQL_USER", "root"),
         "password": os.getenv("MYSQL_PASSWORD", ""),
+        "connection_timeout": 10,
     }
+
+    # Aiven MySQL requires TLS. Render Secret Files makes the CA certificate
+    # available at /etc/secrets/aiven-ca.pem by default.
+    ssl_ca = os.getenv("MYSQL_SSL_CA", "/etc/secrets/aiven-ca.pem")
+    if os.path.isfile(ssl_ca):
+        cfg.update(
+            {
+                "ssl_ca": ssl_ca,
+                "ssl_verify_cert": True,
+                "ssl_verify_identity": True,
+            }
+        )
+    else:
+        if os.getenv("RENDER", "").lower() == "true" or os.getenv("FLASK_DEBUG", "0") != "1":
+            raise RuntimeError(
+                "Aiven CA certificate not found. Add it to Render Secret Files "
+                "as aiven-ca.pem before starting the production backend."
+            )
+
     if include_database:
-        cfg["database"] = os.getenv("MYSQL_DB", "startup_labbook")
+        cfg["database"] = os.getenv("MYSQL_DB", "defaultdb")
     return cfg
 
 
@@ -111,28 +132,11 @@ def execute_many(sql, rows):
 
 
 def ensure_database():
-    """Create the configured database and required tables without destructive DROP statements."""
-    conn = None
-    cur = None
-    db_name = os.getenv("MYSQL_DB", "startup_labbook")
-    try:
-        server_cfg = db_config(include_database=False)
-        conn = mysql.connector.connect(**server_cfg)
-        cur = conn.cursor()
-        safe_db = "".join(ch for ch in db_name if ch.isalnum() or ch == "_")
-        if safe_db != db_name:
-            raise RuntimeError("MYSQL_DB contains unsupported characters.")
-        cur.execute(
-            f"CREATE DATABASE IF NOT EXISTS `{safe_db}` "
-            "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
-        )
-        conn.commit()
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
+    """Create required tables in the already-provisioned Aiven database.
 
+    This is intentionally non-destructive: it never creates, drops, or truncates
+    the configured production database.
+    """
     conn = mysql.connector.connect(**db_config())
     cur = conn.cursor()
     statements = [
@@ -288,12 +292,12 @@ def security_headers(response):
 
 
 def login_required(role):
+    """Compatibility decorator for any future protected API view."""
     def decorator(view):
         @wraps(view)
         def wrapped(*args, **kwargs):
             if session.get("role") != role:
-                flash("Please sign in to continue.", "warning")
-                return redirect(url_for("admin_login" if role == "admin" else "login"))
+                return api_error("Authentication required.", 401)
             return view(*args, **kwargs)
         return wrapped
     return decorator

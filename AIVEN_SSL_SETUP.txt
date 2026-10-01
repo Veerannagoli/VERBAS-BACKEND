@@ -1,0 +1,8 @@
+VERBAS Aiven SSL setup
+
+1. In Aiven: Overview -> Connection information -> CA Certificate -> Download.
+2. In Render: Environment -> Secret Files -> Add Secret File.
+3. Filename: aiven-ca.pem
+4. Paste the complete PEM certificate contents and save.
+5. The backend expects /etc/secrets/aiven-ca.pem and verifies the Aiven server certificate.
+6. MYSQL_SSL_CA may be set to another runtime path if needed.
