@@ -9,11 +9,16 @@ import mysql.connector
 from mysql.connector import Error, IntegrityError
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()
 
 app = Flask(__name__)
+
+# Render sits behind a trusted reverse proxy. ProxyFix lets Flask see the
+# original client IP from the proxy headers for the office-IP allowlist.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config["DEBUG"] = os.getenv("FLASK_DEBUG", "0") == "1"
 
 _secret_key = os.getenv("SECRET_KEY", "").strip()
@@ -253,6 +258,17 @@ _api_db_initialized = False
 @app.before_request
 def security_api():
     global _api_db_initialized
+
+    # Optional public-IP allowlist. When ALLOWED_PUBLIC_IPS is set, every
+    # application request must come from one of those public IPv4/IPv6
+    # addresses. Keep this list limited to the company's office internet
+    # public IP(s). Multiple addresses may be comma-separated.
+    allowed_ips = {x.strip() for x in os.getenv("ALLOWED_PUBLIC_IPS", "").split(",") if x.strip()}
+    if allowed_ips:
+        client_ip = request.remote_addr or ""
+        if client_ip not in allowed_ips:
+            return jsonify({"ok": False, "message": "Access is allowed only from the authorized office network."}), 403
+
     if not _api_db_initialized:
         ensure_database()
         bootstrap_admin()
